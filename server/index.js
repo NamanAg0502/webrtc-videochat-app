@@ -1,55 +1,32 @@
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
+const app = require('express')();
+const server = require('http').createServer(app);
+const cors = require('cors');
 
-const app = express();
-const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
+const io = require('socket.io')(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-app.use(
-  cors({
-    origin: 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST'],
-  })
-);
-app.use(bodyParser.json());
+app.use(cors());
 
-app.get('/', (req, res) => {
-  res.send('Hello World');
+const port = process.env.PORT || 5001;
+
+app.get('/', function (req, res) {
+  res.send('server is running');
 });
 
 io.on('connection', (socket) => {
-  socket.emit('me', socket.id);
+  socket.emit('connection', socket.id);
+  socket.on('join-room', (roomId, userId) => {
+    socket.emit('joined-room');
+    socket.join(roomId);
+    socket.to(roomId).emit('user-connected', userId);
 
-  socket.on('disconnect', () => {
-    socket.broadcast.emit('callEnded');
-  });
-
-  socket.on('callUser', ({ userToCall, signalData, from, name }) => {
-    io.to(userToCall).emit('callUser', { signal: signalData, from, name });
-  });
-
-  socket.on('answerCall', (data) => {
-    io.to(data.to).emit('callAccepted', data.signal);
-  });
-
-  socket.on('sendMessage', (message) => {
-    io.emit('sendMessage', message);
-  });
-
-  socket.on('typing', (data) => {
-    io.emit('typing', data);
+    socket.on('disconnect', () => {
+      socket.to(roomId).emit('user-disconnected');
+    });
   });
 });
 
-server.listen(4000, () => {
-  console.log('Server listening on port 4000');
+server.listen(port, function () {
+  console.log('Server is listening on port ' + port);
 });
